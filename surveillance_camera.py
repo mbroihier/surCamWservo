@@ -4,6 +4,7 @@ Surveillance Camera module
 import io
 import glob
 from http import server as httpServer
+import os
 import socketserver
 import time
 import threading
@@ -126,10 +127,13 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                 page += line + '\n'
                 if beforeList:
                     if '<list>' in line:
+                        page += '<form action="/index.html" method="post">'
                         beforeList = False
                         for afile in sorted(files):
-                            page += '<li><a href=' + afile + '>' + afile + '</a></li>'
+                            page += '<li><a href=' + afile + '>' + afile + '</a><label for="' + afile + '"></label><input type="checkbox" name="' + afile + '"></li>'
                         page += '<li><a href=camera>camera</a></li>'
+                        page += '<button type="submit">Delete Checked Files</button>'
+                        page += '</form>'
             content = page.encode('utf-8')
             self.server.output.start(self.server.fileName)
             self.send_response(200)
@@ -196,7 +200,23 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
         '''
         do_POST - handles POST requests from an HTTP client - they are not expected
         '''
-        print("Illegal path:", self.path)
+        print("Processing post:", self.path)
+        if self.path == '/index.html':
+            length = int(self.headers['Content-Length'])
+            line = self.rfile.read(length)
+            line = line.decode('utf-8')
+            filesToDelete = line.split('=on')
+            for fileName in filesToDelete:
+                if fileName:
+                    conditionedFileName = fileName.strip('&').replace('%3A', ':')
+                    print("Request to delete file:", conditionedFileName)
+                    try:
+                        os.remove(conditionedFileName)
+                    except FileNotFound:
+                        print("Error on attempt to delete", conditionedFileName)
+            self.send_response(302)
+            self.send_header('location', 'index.html')
+            self.end_headers()
 
 
 class MotionDetector(PiMotionAnalysis):
