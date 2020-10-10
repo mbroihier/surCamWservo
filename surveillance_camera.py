@@ -232,6 +232,7 @@ class MotionDetector(PiMotionAnalysis):
         self.stream = stream
         self.lastSampleTime = time.time() - 15.0
         self.consecutiveCount = 0
+        self.writeThreadActive = False
 
     def writeFile(self):
         '''
@@ -242,25 +243,28 @@ class MotionDetector(PiMotionAnalysis):
         time.sleep(20)
         self.stream.copy_to(fileName, first_frame=None)
         print("Done")
+        self.writeThreadActive = False
 
     def analyze(self, array):
         '''
         analyze a set of frames and determine if something is moving in the frame
         '''
-        shape = array['sad'].shape
-        size = shape[0] * (shape[1] - 1)
-        threshold = size / 100  # 1% of scene changed by more than 254 counts
-        # Count the cells where the sum of the absolute difference is greater than 255
-        activeCells = (array['sad'] > 255).sum()
-        if time.time() - self.lastSampleTime > 20:
-            if activeCells > threshold:
-                self.consecutiveCount += 1
-                if self.consecutiveCount > 2:
-                    self.lastSampleTime = time.time()
-                    threading.Thread(target=self.writeFile).start()
+        if not self.writeThreadActive:
+            shape = array['sad'].shape
+            size = shape[0] * (shape[1] - 1)
+            threshold = size / 100  # 1% of scene changed by more than 254 counts
+            # Count the cells where the sum of the absolute difference is greater than 255
+            activeCells = (array['sad'] > 255).sum()
+            if time.time() - self.lastSampleTime > 20:
+                if activeCells > threshold:
+                    self.consecutiveCount += 1
+                    if self.consecutiveCount > 2:
+                        self.lastSampleTime = time.time()
+                        self.writeThreadActive = True
+                        threading.Thread(target=self.writeFile).start()
+                        self.consecutiveCount = 0
+                else:
                     self.consecutiveCount = 0
-            else:
-                self.consecutiveCount = 0
 
     def analyse(self, array):
         '''
