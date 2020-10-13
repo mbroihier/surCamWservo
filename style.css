@@ -1,0 +1,44 @@
+html {
+    max-height: 800px;
+    max-width: 650px;
+    min-height: 800px;
+    min-width: 650px;
+}
+                   
+h1 {
+    font-size: 200%;
+    text-align: center;
+}
+
+h2 {
+    font-size: 100%;
+    text-align: left;
+}
+
+
+ul {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+li {
+    text-align: left;
+}
+
+body {
+    font-family: helvetica;
+    color: #000000;
+}
+
+a {
+    font-family: helvetica;
+    color: #000000;
+}
+
+body input,body label {
+    font-weight: normal;
+    text-align: right;
+}
+
+
+

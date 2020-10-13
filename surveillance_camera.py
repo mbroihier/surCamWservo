@@ -17,15 +17,16 @@ PAGE = """\
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Video from rpi2</title>
+<link rel="stylesheet" href="style.css"/>
+<title>SurCam</title>
 </head>
 <body>
-<h1>Recorded video on rpi2</h1>
+<h1>Video from surCam Beta</h1>
 <img class="base" src="stream.mjpg" width="640" height="480" style="position:absolute; top:60px; left:10px" />
 <canvas class="overlay" id="imageArea" width="640" height="480" style="position:absolute; top:60px; left:10px"></canvas>
 <div style="position:absolute; top:540px; left:20px">
-<list>
-</list>
+<h2>Video Sources</h2>
+<ul>
 </div>
 </body>
 </html>
@@ -67,11 +68,18 @@ class StreamingOutput():
             if not self.stop:
                 segmentStart = 0
                 while buff:
-                    for index in range(len(buff)-1):
-                        if buff[index] == 0xff and buff[index+1] == 0xd8:
-                            self.write(buff[segmentStart:index])
-                            segmentStart = index
+                    location = buff.find(self.startOfFrame, segmentStart)
+                    while location > 0:
+                        self.write(buff[segmentStart:location])
+                        spin = 0
+                        while spin < 1250:
+                            spin += 1
+                        segmentStart = location
+                        location = buff.find(self.startOfFrame, segmentStart+2)
                     self.write(buff[segmentStart:])
+                    spin = 0
+                    while spin < 1250:
+                        spin += 1
                     segmentStart = 0
                     buff = fileHandle.read(10000)
                     if self.stop:
@@ -126,18 +134,35 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
             for line in PAGE.split("\n"):
                 page += line + '\n'
                 if beforeList:
-                    if '<list>' in line:
-                        page += '<form action="/index.html" method="post">'
+                    if '<ul>' in line:
+                        page += '<form action="/index.html" method="post" id="deletes">'
                         beforeList = False
                         for afile in sorted(files):
                             page += '<li><a href=' + afile + '>' + afile + '</a><label for="' + afile + '"></label><input type="checkbox" name="' + afile + '"></li>'
                         page += '<li><a href=camera>camera</a></li>'
-                        page += '<button type="submit">Delete Checked Files</button>'
+                        page += '</form>'
+                        page += '</ul>'
+                        page += '<button type="submit" form="deletes">Delete Checked Files</button>'
+                        page += '<form action="/index.html" method="post">'
+                        page += '<h2>Motion Detection Sensitivity</h2>'
+                        page += '<label for="Attenuation">Least(99.99) / Most (0.01)</label><input pattern="[0-9]{1,2}\.[0-9]{1,2}" type="text" name="Attenuation"'
+                        page += ' placeholder="' + "{:5.2f}".format(self.server.motionDetector.sensitivity) + '" maxlength="6" size="6">'
                         page += '</form>'
             content = page.encode('utf-8')
             self.server.output.start(self.server.fileName)
             self.send_response(200)
             self.send_header('Content-Type', 'text/html')
+            self.send_header('Content-Length', len(content))
+            self.end_headers()
+            self.wfile.write(content)
+        elif self.path == '/style.css':
+            fileObject = open('./style.css', 'r')
+            content = ""
+            for line in fileObject:
+                content += line
+            content = content.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/css')
             self.send_header('Content-Length', len(content))
             self.end_headers()
             self.wfile.write(content)
@@ -198,7 +223,7 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
 
     def do_POST(self):
         '''
-        do_POST - handles POST requests from an HTTP client - they are not expected
+        do_POST - handles POST requests from an HTTP client
         '''
         print("Processing post:", self.path)
         if self.path == '/index.html':
@@ -209,11 +234,16 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
             for fileName in filesToDelete:
                 if fileName:
                     conditionedFileName = fileName.strip('&').replace('%3A', ':')
-                    print("Request to delete file:", conditionedFileName)
-                    try:
-                        os.remove(conditionedFileName)
-                    except FileNotFound:
-                        print("Error on attempt to delete", conditionedFileName)
+                    if "Attenuation" in fileName:
+                        newValue = fileName.replace("Attenuation=", "")
+                        print("Setting sensitivity level to", newValue)
+                        self.server.motionDetector.setSensitivity(float(newValue))
+                    else:
+                        print("Request to delete file:", conditionedFileName)
+                        try:
+                            os.remove(conditionedFileName)
+                        except FileNotFound:
+                            print("Error on attempt to delete", conditionedFileName)
             self.send_response(302)
             self.send_header('location', 'index.html')
             self.end_headers()
@@ -233,6 +263,7 @@ class MotionDetector(PiMotionAnalysis):
         self.lastSampleTime = time.time() - 15.0
         self.consecutiveCount = 0
         self.writeThreadActive = False
+        self.sensitivity = 99.99  # no motion detection
 
     def writeFile(self):
         '''
@@ -240,7 +271,7 @@ class MotionDetector(PiMotionAnalysis):
         '''
         fileName = time.strftime("Motion_Detected%Y-%m-%d:%H:%M.mjpeg", time.gmtime())
         print("Writing file:", fileName)
-        time.sleep(20)
+        time.sleep(15)
         self.stream.copy_to(fileName, first_frame=None)
         print("Done")
         self.writeThreadActive = False
@@ -252,10 +283,10 @@ class MotionDetector(PiMotionAnalysis):
         if not self.writeThreadActive:
             shape = array['sad'].shape
             size = shape[0] * (shape[1] - 1)
-            threshold = size / 100  # 1% of scene changed by more than 254 counts
+            threshold = size / 100 * self.sensitivity # 1% of scene changed by more than 254 counts
             # Count the cells where the sum of the absolute difference is greater than 255
             activeCells = (array['sad'] > 255).sum()
-            if time.time() - self.lastSampleTime > 20:
+            if time.time() - self.lastSampleTime > 15:
                 if activeCells > threshold:
                     self.consecutiveCount += 1
                     if self.consecutiveCount > 2:
@@ -263,6 +294,7 @@ class MotionDetector(PiMotionAnalysis):
                         self.writeThreadActive = True
                         threading.Thread(target=self.writeFile).start()
                         self.consecutiveCount = 0
+                        print("current threshold:", threshold, " activeCells:", activeCells, " sensitivity:", self.sensitivity)
                 else:
                     self.consecutiveCount = 0
 
@@ -271,6 +303,12 @@ class MotionDetector(PiMotionAnalysis):
         analyse a set of frames and determine if something is moving in the frame
         '''
         self.analyze(array)
+
+    def setSensitivity(self, value):
+        '''
+        setter for sensitivity
+        '''
+        self.sensitivity = value
 
 class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
     '''
@@ -283,8 +321,8 @@ class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
         self.fileName = 'default'
         self.output = StreamingOutput()
         self.camera = picamera.PiCamera(resolution='VGA', framerate=30)
-        self.camera.vflip = True
-        self.camera.hflip = True
+        #self.camera.vflip = True
+        #self.camera.hflip = True
         self.circularBuffer = picamera.PiCameraCircularIO(self.camera, seconds=15)
         self.motionDetector = MotionDetector(self.camera, self.circularBuffer)
         self.camera.start_recording(self.circularBuffer, format='mjpeg', splitter_port=1)
