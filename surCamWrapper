@@ -1,0 +1,3 @@
+#!/bin/bash
+cd /home/pi/surCam/; python3 ./surveillance_camera.py >/dev/null 2>&1
+

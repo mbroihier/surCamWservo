@@ -1,0 +1,12 @@
+[Unit]
+Description=Surveillance Camera
+After=network.target
+
+[Service]
+ExecStart=/home/pi/surCam/surCamWrapper
+Restart=always
+RestartSec=10
+
+[Install]
+Alias=surCam.service
+WantedBy=default.target
