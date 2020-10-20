@@ -23,6 +23,8 @@ ul {
 
 li {
     text-align: left;
+    margin-top: 4px;
+    margin-bottom: 4px;
 }
 
 body {
@@ -39,6 +41,3 @@ body input,body label {
     font-weight: normal;
     text-align: right;
 }
-
-
-

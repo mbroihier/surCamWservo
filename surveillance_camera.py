@@ -143,6 +143,25 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                         page += '</form>'
                         page += '</ul>'
                         page += '<button type="submit" form="deletes">Delete Checked Files</button>'
+                        page += '<h2>Camera Settings</h2>'
+                        page += '<ul>'
+                        page += '<li>'
+                        page += '<form action="/index.html" method="post">'
+                        page += '<label for="camera1">Shutter Speed:</label><input pattern="[0-9]{1,7}" type="text" name="Shutter"'
+                        page += ' placeholder="' + "{:7d}".format(self.server.camera.exposure_speed) + '" maxlength="8" size="8"> microseconds</li>'
+                        page += '</form>'
+                        page += '<li>'
+                        page += '<form action="/index.html" method="post">'
+                        page += '<label for="camera2">Frame Rate:</label><input pattern="[0-9]{1,2}" type="text" name="FrameRate"'
+                        page += ' placeholder="' + "{:2d}".format(int(float(self.server.camera.framerate.numerator)/float(self.server.camera.framerate.denominator))) + '" maxlength="3" size="3"> frames / second</li>'
+                        page += '</form>'
+                        page += '<li>'
+                        page += '<form action="/index.html" method="post">'
+                        page += '<label for="camera3">ISO:</label><input pattern="[0-9]{3}" type="text" name="ISO"'
+                        page += ' placeholder="' + "{:4d}".format(self.server.camera.iso) + '" maxlength="3" size="3"></li>'
+                        page += '</form>'
+                        page += '<li> Exposure Mode: ' + self.server.camera.exposure_mode + '</li>'
+                        page += '</ul>'
                         page += '<form action="/index.html" method="post">'
                         page += '<h2>Motion Detection Sensitivity</h2>'
                         page += '<label for="Attenuation">Least(99.99) / Most (0.01)</label><input pattern="[0-9]{1,2}\.[0-9]{1,2}" type="text" name="Attenuation"'
@@ -236,8 +255,33 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                     conditionedFileName = fileName.strip('&').replace('%3A', ':')
                     if "Attenuation" in fileName:
                         newValue = fileName.replace("Attenuation=", "")
+                        if newValue == "":
+                            newValue = "99.99"
                         print("Setting sensitivity level to", newValue)
                         self.server.motionDetector.setSensitivity(float(newValue))
+                        time.sleep(1.0)
+                    elif "Shutter" in fileName:
+                        newValue = fileName.replace("Shutter=", "")
+                        if newValue == "":
+                            newValue = "0"
+                        print("Setting shutter speed to", newValue)
+                        self.server.camera.shutter_speed = int(newValue)
+                        time.sleep(1.0)
+                    elif "FrameRate" in fileName:
+                        newValue = fileName.replace("FrameRate=", "")
+                        if newValue == "":
+                            newValue = str(self.server.camera.framerate)
+                        print("Setting framerate to", newValue)
+                        self.server.framerate = int(newValue)
+                        self.server.restartCamera()
+                        time.sleep(3.0)
+                    elif "ISO" in fileName:
+                        newValue = fileName.replace("ISO=", "")
+                        if newValue == "":
+                            newValue = str(800)
+                        print("Setting ISO to", newValue)
+                        self.server.camera.iso = int(newValue)
+                        time.sleep(1.0)
                     else:
                         print("Request to delete file:", conditionedFileName)
                         try:
@@ -310,6 +354,47 @@ class MotionDetector(PiMotionAnalysis):
         '''
         self.sensitivity = value
 
+class Background():
+    '''
+    A background thread that does camera data collection
+    '''
+    def __init__(self, cameraObject):
+        '''
+        Constructor
+        '''
+        self.camera = cameraObject
+        self.terminate = False
+
+    def collector(self):
+        '''
+        Process that collects and records the desired data
+        '''
+        sampleCount = 0
+        redGainSum = 0.0
+        blueGainSum = 0.0
+        analogueGainSum = 0.0
+        while not self.terminate:
+            time.sleep(1.0)
+            redGain = float(self.camera.awb_gains[0].numerator) / float(self.camera.awb_gains[0].denominator)
+            blueGain = float(self.camera.awb_gains[1].numerator) / float(self.camera.awb_gains[1].denominator)
+            redGainSum += redGain
+            blueGainSum += blueGain
+            analogueGainSum += float(self.camera.analog_gain)
+            sampleCount += 1
+            if sampleCount >= 60:  # one minute
+                print("Time: {}, White Balance Gains: {:3.1f}, {:3.1f}".format(time.time(), redGainSum/60.0, blueGainSum/60.0))
+                print("Time: {}, Analogue Gain: {:3.1f}".format(time.time(), analogueGainSum/60.0))
+                sampleCount = 0
+                redGainSum = 0.0
+                blueGainSum = 0.0
+                analogueGainSum = 0.0
+
+    def terminateBackground(self):
+        '''
+        Stop the thread
+        '''
+        self.terminate = True
+
 class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
     '''
     A Streaming Camera HTTP server class that iterfaces the camera to a HTTP server
@@ -320,15 +405,33 @@ class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
         super(StreamingCameraServer, self).__init__(address, _class)
         self.fileName = 'default'
         self.output = StreamingOutput()
-        self.camera = picamera.PiCamera(resolution='VGA', framerate=30)
+        self.framerate = 1
+        self.camera = picamera.PiCamera(resolution='VGA', framerate=self.framerate)
         #self.camera.vflip = True
         #self.camera.hflip = True
+        self.camera.iso = 800
+        self.camera.shutter_speed = 0
+        self.camera.sensor_mode = 1
+        self.camera.exposure_mode = 'fixedfps'
         self.circularBuffer = picamera.PiCameraCircularIO(self.camera, seconds=15)
         self.motionDetector = MotionDetector(self.camera, self.circularBuffer)
         self.camera.start_recording(self.circularBuffer, format='mjpeg', splitter_port=1)
         self.camera.start_recording(self.output, format='mjpeg', splitter_port=2, resize=(320, 240))
         self.camera.start_recording('/dev/null', format='h264', splitter_port=3,
                                     motion_output=self.motionDetector)
+        self.background = Background(self.camera)
+
+    def restartCamera(self):
+        self.camera.stop_recording(splitter_port=1)
+        self.camera.stop_recording(splitter_port=2)
+        self.camera.stop_recording(splitter_port=3)
+        time.sleep(1.0)
+        self.camera.framerate = self.framerate
+        self.camera.start_recording(self.circularBuffer, format='mjpeg', splitter_port=1)
+        self.camera.start_recording(self.output, format='mjpeg', splitter_port=2, resize=(320, 240))
+        self.camera.start_recording('/dev/null', format='h264', splitter_port=3,
+                                    motion_output=self.motionDetector)
+        
 
 def main():
     '''
@@ -336,11 +439,16 @@ def main():
     '''
     address = ('', 8000)        # use port 8000
     server = StreamingCameraServer(address, StreamingHandler)  # Make a Streaming Camera HTTP server
+    backgroundThread = threading.Thread(target=server.background.collector)
+    backgroundThread.start()
+    print("Background collection started")
     try:
         server.serve_forever()      # start the server
     except KeyboardInterrupt:
         print("Gracefully exiting via user request")
     finally:
         server.camera.stop_recording()
+    server.background.terminateBackground()
+    backgroundThread.join()
 if __name__ == '__main__':
     main()
