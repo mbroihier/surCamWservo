@@ -158,7 +158,7 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                         page += '<li>'
                         page += '<form action="/index.html" method="post">'
                         page += '<label for="camera3">ISO:</label><input pattern="[0-9]{3}" type="text" name="ISO"'
-                        page += ' placeholder="' + "{:4d}".format(self.server.camera.iso) + '" maxlength="3" size="3"></li>'
+                        page += ' placeholder="' + "{:4d}".format(self.server.camera.iso) + '" maxlength="5" size="5"></li>'
                         page += '</form>'
                         page += '<li> Exposure Mode: ' + self.server.camera.exposure_mode + '</li>'
                         page += '</ul>'
@@ -313,7 +313,7 @@ class MotionDetector(PiMotionAnalysis):
         '''
         writeFile - writes a sample of the camera stream to a file
         '''
-        fileName = time.strftime("Motion_Detected%Y-%m-%d:%H:%M.mjpeg", time.gmtime())
+        fileName = time.strftime("Motion_Detected%Y-%m-%d:%H:%M:%S.mjpeg", time.gmtime())
         print("Writing file:", fileName)
         time.sleep(15)
         self.stream.copy_to(fileName, first_frame=None)
@@ -423,15 +423,22 @@ class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
 
     def restartCamera(self):
         self.camera.stop_recording(splitter_port=1)
-        self.camera.stop_recording(splitter_port=2)
+        if self.fileName == 'default':
+            self.camera.stop_recording(splitter_port=2)
         self.camera.stop_recording(splitter_port=3)
         time.sleep(1.0)
         self.camera.framerate = self.framerate
         self.camera.start_recording(self.circularBuffer, format='mjpeg', splitter_port=1)
-        self.camera.start_recording(self.output, format='mjpeg', splitter_port=2, resize=(320, 240))
+        if self.fileName == 'default':
+            self.camera.start_recording(self.output, format='mjpeg', splitter_port=2, resize=(320, 240))
         self.camera.start_recording('/dev/null', format='h264', splitter_port=3,
                                     motion_output=self.motionDetector)
-        
+
+    def stopCamera(self):
+        self.camera.stop_recording(splitter_port=1)
+        if self.fileName == 'default':
+            self.camera.stop_recording(splitter_port=2)
+        self.camera.stop_recording(splitter_port=3)
 
 def main():
     '''
@@ -447,7 +454,7 @@ def main():
     except KeyboardInterrupt:
         print("Gracefully exiting via user request")
     finally:
-        server.camera.stop_recording()
+        server.stopCamera()
     server.background.terminateBackground()
     backgroundThread.join()
 if __name__ == '__main__':
