@@ -17,6 +17,7 @@ PAGE = """\
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Pragma" content="no-cache">
 <link rel="stylesheet" href="style.css"/>
 <title>SurCam</title>
 </head>
@@ -407,8 +408,8 @@ class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
         self.output = StreamingOutput()
         self.framerate = 1
         self.camera = picamera.PiCamera(resolution='VGA', framerate=self.framerate)
-        #self.camera.vflip = True
-        #self.camera.hflip = True
+        self.camera.vflip = True
+        self.camera.hflip = True
         self.camera.iso = 800
         self.camera.shutter_speed = 0
         self.camera.sensor_mode = 1
