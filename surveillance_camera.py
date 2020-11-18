@@ -258,7 +258,7 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                             newValue = "0"
                         print("Setting shutter speed to", newValue)
                         self.server.camera.shutter_speed = int(newValue)
-                        self.server.camera.defaultsObject.setShutter_speed(int(newValue))
+                        self.server.defaultsObject.setShutter_speed(int(newValue))
                         time.sleep(1.0)
                     elif "FrameRate" in fileName:
                         newValue = fileName.replace("FrameRate=", "")
