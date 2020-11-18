@@ -4,6 +4,7 @@ Surveillance Camera module
 import io
 import glob
 from http import server as httpServer
+import json
 import os
 import socketserver
 import time
@@ -12,26 +13,6 @@ from threading import Condition
 import picamera
 from picamera.array import PiMotionAnalysis
 
-PAGE = """\
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Pragma" content="no-cache">
-<link rel="stylesheet" href="style.css"/>
-<title>SurCam</title>
-</head>
-<body>
-<h1>Video from surCam Beta</h1>
-<img class="base" src="stream.mjpg" width="640" height="480" style="position:absolute; top:60px; left:10px" />
-<canvas class="overlay" id="imageArea" width="640" height="480" style="position:absolute; top:60px; left:10px"></canvas>
-<div style="position:absolute; top:540px; left:20px">
-<h2>Video Sources</h2>
-<ul>
-</div>
-</body>
-</html>
-"""
 
 class StreamingOutput():
     '''
@@ -131,43 +112,52 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
         elif self.path == '/index.html':
             files = glob.glob('*.mjpeg')
             page = ""
-            beforeList = True
-            for line in PAGE.split("\n"):
-                page += line + '\n'
-                if beforeList:
-                    if '<ul>' in line:
-                        page += '<form action="/index.html" method="post" id="deletes">'
-                        beforeList = False
-                        for afile in sorted(files):
-                            page += '<li><a href=' + afile + '>' + afile + '</a><label for="' + afile + '"></label><input type="checkbox" name="' + afile + '"></li>'
-                        page += '<li><a href=camera>camera</a></li>'
-                        page += '</form>'
-                        page += '</ul>'
-                        page += '<button type="submit" form="deletes">Delete Checked Files</button>'
-                        page += '<h2>Camera Settings</h2>'
-                        page += '<ul>'
-                        page += '<li>'
-                        page += '<form action="/index.html" method="post">'
-                        page += '<label for="camera1">Shutter Speed:</label><input pattern="[0-9]{1,7}" type="text" name="Shutter"'
-                        page += ' placeholder="' + "{:7d}".format(self.server.camera.exposure_speed) + '" maxlength="8" size="8"> microseconds</li>'
-                        page += '</form>'
-                        page += '<li>'
-                        page += '<form action="/index.html" method="post">'
-                        page += '<label for="camera2">Frame Rate:</label><input pattern="[0-9]{1,2}" type="text" name="FrameRate"'
-                        page += ' placeholder="' + "{:2d}".format(int(float(self.server.camera.framerate.numerator)/float(self.server.camera.framerate.denominator))) + '" maxlength="3" size="3"> frames / second</li>'
-                        page += '</form>'
-                        page += '<li>'
-                        page += '<form action="/index.html" method="post">'
-                        page += '<label for="camera3">ISO:</label><input pattern="[0-9]{3}" type="text" name="ISO"'
-                        page += ' placeholder="' + "{:4d}".format(self.server.camera.iso) + '" maxlength="5" size="5"></li>'
-                        page += '</form>'
-                        page += '<li> Exposure Mode: ' + self.server.camera.exposure_mode + '</li>'
-                        page += '</ul>'
-                        page += '<form action="/index.html" method="post">'
-                        page += '<h2>Motion Detection Sensitivity</h2>'
-                        page += '<label for="Attenuation">Least(99.99) / Most (0.01)</label><input pattern="[0-9]{1,2}\.[0-9]{1,2}" type="text" name="Attenuation"'
-                        page += ' placeholder="' + "{:5.2f}".format(self.server.motionDetector.sensitivity) + '" maxlength="6" size="6">'
-                        page += '</form>'
+            page += '<!DOCTYPE html>\n'
+            page += '<html lang="en">\n'
+            page += '<head>\n'
+            page += '<meta charset="utf-8">\n'
+            page += '<meta http-equiv="Pragma" content="no-cache">\n'
+            page += '<link rel="stylesheet" href="style.css"/>\n'
+            page += '<title>SurCam</title>\n'
+            page += '</head>\n'
+            page += '<body>\n'
+            if self.server.fileName == 'default':
+                page += '<h1>Video from surCam ' + self.server.defaultsObject.getCameraName() + '</h1>\n'
+            else:
+                page += '<h2>' + self.server.fileName + '</h2>\n'
+            page += '<img class="base" src="stream.mjpg" width="640" height="480" style="position:absolute; top:60px; left:10px" />\n'
+            page += '<canvas class="overlay" id="imageArea" width="640" height="480" style="position:absolute; top:60px; left:10px"></canvas>\n'
+            page += '<div style="position:absolute; top:540px; left:20px">\n'
+            page += '<h2>Video Sources</h2>\n'
+            page += '<ul>\n'
+            page += '<form action="/index.html" method="post" id="deletes">'
+            for afile in sorted(files):
+                page += '<li><a href=' + afile + '>' + afile + '</a><label for="' + afile + '"></label><input type="checkbox" name="' + afile + '"></li>'
+            page += '<li><a href=camera>camera</a></li>'
+            page += '</form>'
+            page += '</ul>'
+            page += '<button type="submit" form="deletes">Delete Checked Files</button>'
+            page += '<h2>Camera Settings</h2>'
+            page += '<ul>'
+            page += '<li>'
+            page += '<form action="/index.html" method="post">'
+            page += '<label for="camera1">Shutter Speed:</label><input pattern="[0-9]{1,7}" type="text" name="Shutter"'
+            page += ' placeholder="' + "{:7d}".format(self.server.camera.exposure_speed) + '" maxlength="8" size="8"> microseconds</li>'
+            page += '</form>'
+            page += '<li>'
+            page += '<form action="/index.html" method="post">'
+            page += '<label for="camera2">Frame Rate:</label><input pattern="[0-9]{1,2}" type="text" name="FrameRate"'
+            page += ' placeholder="' + "{:2d}".format(int(float(self.server.camera.framerate.numerator)/float(self.server.camera.framerate.denominator))) + '" maxlength="3" size="3"> frames / second</li>'
+            page += '</form>'
+            page += '</ul>'
+            page += '<form action="/index.html" method="post">'
+            page += '<h2>Motion Detection Sensitivity</h2>'
+            page += '<label for="Attenuation">Least(99.99) / Most (0.01)</label><input pattern="[0-9]{1,2}\.[0-9]{1,2}" type="text" name="Attenuation"'
+            page += ' placeholder="' + "{:5.2f}".format(self.server.motionDetector.sensitivity) + '" maxlength="6" size="6">'
+            page += '</form>'
+            page += '</div>\n'
+            page += '</body>\n'
+            page += '</html>\n'
             content = page.encode('utf-8')
             self.server.output.start(self.server.fileName)
             self.send_response(200)
@@ -260,6 +250,7 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                             newValue = "99.99"
                         print("Setting sensitivity level to", newValue)
                         self.server.motionDetector.setSensitivity(float(newValue))
+                        self.server.motionDetector.defaultsObject.setSensitivity(float(newValue))
                         time.sleep(1.0)
                     elif "Shutter" in fileName:
                         newValue = fileName.replace("Shutter=", "")
@@ -267,6 +258,7 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                             newValue = "0"
                         print("Setting shutter speed to", newValue)
                         self.server.camera.shutter_speed = int(newValue)
+                        self.server.camera.defaultsObject.setShutter_speed(int(newValue))
                         time.sleep(1.0)
                     elif "FrameRate" in fileName:
                         newValue = fileName.replace("FrameRate=", "")
@@ -274,15 +266,9 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                             newValue = str(self.server.camera.framerate)
                         print("Setting framerate to", newValue)
                         self.server.framerate = int(newValue)
+                        self.server.defaultsObject.setFramerate(int(newValue))
                         self.server.restartCamera()
                         time.sleep(3.0)
-                    elif "ISO" in fileName:
-                        newValue = fileName.replace("ISO=", "")
-                        if newValue == "":
-                            newValue = str(800)
-                        print("Setting ISO to", newValue)
-                        self.server.camera.iso = int(newValue)
-                        time.sleep(1.0)
                     else:
                         print("Request to delete file:", conditionedFileName)
                         try:
@@ -308,7 +294,8 @@ class MotionDetector(PiMotionAnalysis):
         self.lastSampleTime = time.time() - 15.0
         self.consecutiveCount = 0
         self.writeThreadActive = False
-        self.sensitivity = 99.99  # no motion detection
+        self.defaultsObject = HandleDefaults()
+        self.sensitivity = self.defaultsObject.getSensitivity()
 
     def writeFile(self):
         '''
@@ -396,6 +383,124 @@ class Background():
         '''
         self.terminate = True
 
+class HandleDefaults():
+    '''
+    Read and write defaults to JSON file
+    '''
+    def __init__(self):
+        '''
+        Constructor - get initial defaults if they exist, otherwise set them
+        '''
+        self.defaults = {}
+        try:
+            fileHandle = open("./surCamDefaults.json", "r")
+            self.defaults = json.load(fileHandle)
+            fileHandle.close()
+        except FileNotFoundError:
+            print("Defaults file was not found - setting")
+            self.defaults = { 'cameraName' : 'Alpha', 'framerate' : 15, 'vflip' : True, 'hflip' : True,
+                              'iso' : 800, 'shutter_speed' : 0, 'sensitivity' : 99.99 }
+            self.write()
+
+    def getCameraName(self):
+        '''
+        getter - cameraName
+        '''
+        return self.defaults['cameraName']
+    
+    def getFramerate(self):
+        '''
+        getter - framerate
+        '''
+        return self.defaults['framerate']
+    
+    def getVflip(self):
+        '''
+        getter - vflip
+        '''
+        return self.defaults['vflip']
+    
+    def getHflip(self):
+        '''
+        getter - hflip
+        '''
+        return self.defaults['hflip']
+    
+    def getISO(self):
+        '''
+        getter - ISO
+        '''
+        return self.defaults['iso']
+    
+    def getShutter_speed(self):
+        '''
+        getter - shutter_speed
+        '''
+        return self.defaults['shutter_speed']
+    
+    def getSensitivity(self):
+        '''
+        getter - sensitivity
+        '''
+        return self.defaults['sensitivity']
+
+    def setCameraName(self, value):
+        '''
+        setter - cameraName
+        '''
+        self.defaults['cameraName'] = value
+        self.write()
+    
+    def setFramerate(self, value):
+        '''
+        setter - framerate
+        '''
+        self.defaults['framerate'] = value
+        self.write()
+    
+    def setVflip(self, value):
+        '''
+        setter - vflip
+        '''
+        self.defaults['vflip'] = value
+        self.write()
+    
+    def setHflip(self, value):
+        '''
+        setter - hflip
+        '''
+        self.defaults['hflip'] = value
+        self.write()
+    
+    def setISO(self, value):
+        '''
+        setter - ISO
+        '''
+        self.defaults['iso'] = value
+        self.write()
+    
+    def setShutter_speed(self, value):
+        '''
+        setter - shutter_speed
+        '''
+        self.defaults['shutter_speed'] = value
+        self.write()
+    
+    def setSensitivity(self, value):
+        '''
+        setter - sensitivity
+        '''
+        self.defaults['sensitivity'] = value
+        self.write()
+
+    def write(self):
+        '''
+        write - update defaults file
+        '''
+        fileHandle = open("./surCamDefaults.json", "w")
+        jsonString = json.dump(self.defaults, fileHandle)
+        fileHandle.close()
+            
 class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
     '''
     A Streaming Camera HTTP server class that iterfaces the camera to a HTTP server
@@ -406,12 +511,13 @@ class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
         super(StreamingCameraServer, self).__init__(address, _class)
         self.fileName = 'default'
         self.output = StreamingOutput()
-        self.framerate = 1
+        self.defaultsObject = HandleDefaults()
+        self.framerate = self.defaultsObject.getFramerate()
         self.camera = picamera.PiCamera(resolution='VGA', framerate=self.framerate)
-        self.camera.vflip = True
-        self.camera.hflip = True
-        self.camera.iso = 800
-        self.camera.shutter_speed = 0
+        self.camera.vflip = self.defaultsObject.getVflip()
+        self.camera.hflip = self.defaultsObject.getHflip()
+        self.camera.iso = self.defaultsObject.getISO()
+        self.camera.shutter_speed = self.defaultsObject.getShutter_speed()
         self.camera.sensor_mode = 1
         self.camera.exposure_mode = 'fixedfps'
         self.circularBuffer = picamera.PiCameraCircularIO(self.camera, seconds=15)
