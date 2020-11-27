@@ -5,6 +5,7 @@ import io
 import glob
 from http import server as httpServer
 import json
+import numpy as np
 import os
 import socketserver
 import time
@@ -296,6 +297,7 @@ class MotionDetector(PiMotionAnalysis):
         self.writeThreadActive = False
         self.defaultsObject = HandleDefaults()
         self.sensitivity = self.defaultsObject.getSensitivity()
+        self.mask = self.defaultsObject.mask
 
     def writeFile(self):
         '''
@@ -317,7 +319,7 @@ class MotionDetector(PiMotionAnalysis):
             size = shape[0] * (shape[1] - 1)
             threshold = size / 100 * self.sensitivity # 1% of scene changed by more than 254 counts
             # Count the cells where the sum of the absolute difference is greater than 255
-            activeCells = (array['sad'] > 255).sum()
+            activeCells = ((array['sad'] * self.mask) > 255).sum()
             if time.time() - self.lastSampleTime > 15:
                 if activeCells > threshold:
                     self.consecutiveCount += 1
@@ -391,15 +393,25 @@ class HandleDefaults():
         '''
         Constructor - get initial defaults if they exist, otherwise set them
         '''
+        self.mask = np.ones((30, 41), dtype = int)
+        for row in range(30):
+            for col in range(41):
+                if row < 25:
+                    self.mask[row][col] = 0
+                else:
+                    if col > 39:
+                        self.mask[row][col] = 0
         self.defaults = {}
         try:
             fileHandle = open("./surCamDefaults.json", "r")
             self.defaults = json.load(fileHandle)
+            self.mask = np.asarray(self.defaults['mask']).reshape(30, 41)
             fileHandle.close()
         except FileNotFoundError:
             print("Defaults file was not found - setting")
+            
             self.defaults = { 'cameraName' : 'Alpha', 'framerate' : 15, 'vflip' : True, 'hflip' : True,
-                              'iso' : 800, 'shutter_speed' : 0, 'sensitivity' : 99.99 }
+                              'iso' : 800, 'shutter_speed' : 0, 'sensitivity' : 99.99, 'mask' : self.mask.tolist() }
             self.write()
 
     def getCameraName(self):
