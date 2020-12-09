@@ -55,9 +55,9 @@ python3 playback.py (useful at achive location)
 
 The previous instructions apply to only the camera control/administration software.  Notifications are performed by a program called "whatsnew" that is in the https://github.com/mbroihier/whatsnew repository.  This software performs a monitoring task and sends an email to a configured email account.  One of the tasks that whatsnew can do is monitor a directory.  When the directory changes, change information is sent to an email address and the new files in the directory are copied to another location.  The copy is performed using scp and shared ssh keys with a remote machine.  So the destination needs ssh/scp capability - another PI running Raspbian is a good choice especially since rm and find are also used.
 
-    1) Pick an archive site - this location needs ssh/scp support and plenty of disk space to store your video files.
-    2) At this site, create a user account named surcam.
-    3) Setup a directory /blks/surCam that belongs to the surcam user (the destination will be configurable in future releases)
-    4) Share your ssh keys between your cameras and the archive site using the same usr accounts as will be used with the camera software.
-    5) Make sure that you can login to the archive from each camera site without entering a password.
-    6) At each camera site, install whatsnew and configure it to monitor the directory where surCam is installed.
+  1) Pick an archive site - this location needs ssh/scp support and plenty of disk space to store your video files.
+  2) At this site, create a user account named surcam.
+  3) Setup a directory /blks/surCam that belongs to the surcam user (the destination will be configurable in future releases)
+  4) Share your ssh keys between your cameras and the archive site using the same usr accounts as will be used with the camera software.
+  5) Make sure that you can login to the archive from each camera site without entering a password.
+  6) At each camera site, install whatsnew and configure it to monitor the directory where surCam is installed.
