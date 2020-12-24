@@ -286,7 +286,7 @@ class MotionDetector(PiMotionAnalysis):
     MotionDector - class derived from PiMotionAnalysis that implements a motion detection algorithm
     '''
 
-    def __init__(self, camera, stream):
+    def __init__(self, camera, stream, defaultsObject):
         '''
         Constructor
         '''
@@ -295,7 +295,7 @@ class MotionDetector(PiMotionAnalysis):
         self.lastSampleTime = time.time() - 15.0
         self.consecutiveCount = 0
         self.writeThreadActive = False
-        self.defaultsObject = HandleDefaults()
+        self.defaultsObject = defaultsObject
         self.sensitivity = self.defaultsObject.getSensitivity()
         self.mask = self.defaultsObject.mask
 
@@ -533,7 +533,7 @@ class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
         self.camera.sensor_mode = 1
         self.camera.exposure_mode = 'fixedfps'
         self.circularBuffer = picamera.PiCameraCircularIO(self.camera, seconds=15)
-        self.motionDetector = MotionDetector(self.camera, self.circularBuffer)
+        self.motionDetector = MotionDetector(self.camera, self.circularBuffer, self.defaultsObject)
         self.camera.start_recording(self.circularBuffer, format='mjpeg', splitter_port=1)
         self.camera.start_recording(self.output, format='mjpeg', splitter_port=2, resize=(320, 240))
         self.camera.start_recording('/dev/null', format='h264', splitter_port=3,
