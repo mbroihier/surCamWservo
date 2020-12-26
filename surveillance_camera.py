@@ -111,54 +111,204 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
             self.end_headers()
 
         elif self.path == '/index.html':
-            files = glob.glob('*.mjpeg')
-            page = ""
-            page += '<!DOCTYPE html>\n'
-            page += '<html lang="en">\n'
-            page += '<head>\n'
-            page += '<meta charset="utf-8">\n'
-            page += '<meta http-equiv="Pragma" content="no-cache">\n'
-            page += '<link rel="stylesheet" href="style.css"/>\n'
-            page += '<title>SurCam</title>\n'
-            page += '</head>\n'
-            page += '<body>\n'
-            if self.server.fileName == 'default':
-                page += '<h1>Video from surCam ' + self.server.defaultsObject.getCameraName() + '</h1>\n'
+            if self.server.settingsMode:
+                page = ""
+                page += '<!DOCTYPE html>\n'
+                page += '<html lang="en">\n'
+                page += '<head>\n'
+                page += '<meta charset="utf-8">\n'
+                page += '<meta http-equiv="Pragma" content="no-cache">\n'
+                page += '<link rel="stylesheet" href="style.css"/>\n'
+                page += '<title>Calibrate</title>\n'
+                page += '</head>\n'
+                page += '<body>\n'
+                page += '<h1>Settings Mode</h1>\n'
+                page += '<img class="base" src="stream.mjpg" width="640" height="480" style="position:absolute; top:60px; left:10px" />\n'
+                page += '<canvas class="overlay" id="imageArea" width="640" height="480" style="position:absolute; top:60px; left:10px"></canvas>\n'
+                page += '<script>'
+                page += 'var mask = ' + str(self.server.defaultsObject.mask.tolist()) + ';\n'
+                page += 'console.log("after definition, before drawGrid:", mask[29][21]);\n'
+                page += 'function drawGrid(canvas, mask) {\n'
+                page += "  let context = canvas.getContext('2d');\n"
+                page += '  context.clearRect(0, 0, canvas.width, canvas.height);\n'
+                page += '  context.beginPath();\n'
+                page += '  context.lineWidth = 1;\n'
+                page += '  context.globalAlpha = 0.7;\n'
+                page += "  context.strokeStyle = 'white';\n"
+                page += '  let maskIndexX = 0;\n'
+                page += '  let maskIndexY = 0;\n'
+                page += '  let totalRed = 0;\n'
+                page += '  let totalWhite = 0;\n'
+                page += '  for (var row = 0; row < 480; row += 16) {\n'
+                page += '    //console.log("Processing row", row, "with mask index of", maskIndexY, "current total reds", totalRed, "whites", totalWhite);\n'
+                page += '    //context.moveTo(0, row);\n'
+                page += '    for (var col = 0; col < 640; col += 16) {\n'
+                page += '      context.beginPath();\n'
+                page += '      context.moveTo(col, row);\n'
+                page += '      //console.log("Processing col", col, "with mask index of", maskIndexX);\n'
+                page += '      if (mask[maskIndexY][maskIndexX] == 1) {\n'
+                page += "        context.strokeStyle = 'red';\n"
+                page += '        //console.log("setting red");\n'
+                page += '        totalRed++;\n'
+                page += '      } else {'
+                page += "        context.strokeStyle = 'white';\n"
+                page += '        totalWhite++;\n'
+                page += '        //console.log("setting white");\n'
+                page += '      }'
+                page += '      context.lineTo(col+16, row);\n'
+                page += '      maskIndexX += 1;\n'
+                page += '      context.stroke();\n'
+                page += '    }'
+                page += '    maskIndexX = 0;\n'
+                page += '    maskIndexY += 1;\n'
+                page += '  }\n'
+                page += '  context.beginPath();\n'
+                page += "  context.strokeStyle = 'white';\n"
+                page += '  for (var col = 0; col < 640; col += 16) {\n'
+                page += '    context.moveTo(col, 0);\n'
+                page += '    context.lineTo(col, 479);\n'
+                page += '  }\n'
+                page += '  context.stroke();\n'
+                page += '  console.log("stroking row, total red regions:", totalRed);\n'
+                page += '}\n'
+                page += 'function getMousePosition(canvas, event) {\n'
+                page += '  let rect = canvas.getBoundingClientRect();\n'
+                page += '  let x = event.clientX - rect.left;\n'
+                page += '  let y = event.clientY - rect.top;\n'
+                page += '  if (x < 0) {\n'
+                page += '    x = 0;\n'
+                page += '  } else if (x > (rect.width - 16)) {\n'
+                page += '    x = rect.width - 16;\n'
+                page += '  }\n'
+                page += '  if (y < 0) {\n'
+                page += '    y = 0;\n'
+                page += '  } else if (y > (rect.height - 16)) {\n'
+                page += '    y = rect.height - 16;\n'
+                page += '  }\n'
+                page += '  return { x: x, y: y };\n'
+                page += '}\n'
+                page += 'console.log("sample mask value:", mask[29][20]);\n'
+                page += 'var canvas = document.getElementById("imageArea");\n'
+                page += 'console.log("canvas has been definded", canvas);\n'
+                page += 'var mousePosition = {x: 0, y:0};\n'
+                page += 'var cursorMousePosition = {x:0, y:0};\n'
+                page += 'var message = "";\n'
+                page += 'var drawing = false;\n'
+                page += 'var rawLastDigit = null;\n'
+                page += 'var changeMask = false;\n'
+                page += 'var lastMaskX = -1;\n'
+                page += 'var lastMaskY = -1;\n'
+                page += "canvas.addEventListener('mousemove', function(event) {\n"
+                page += '  cursorMousePosition = getMousePosition(canvas, event);\n'
+                page += '  let newX = Math.floor(cursorMousePosition.x / 16);\n'
+                page += '  let newY = Math.floor(cursorMousePosition.y /16);\n'
+                page += '  if (changeMask) {\n'
+                page += '    if (newX != lastMaskX || newY != lastMaskY) {\n'
+                page += '      console.log("new cell position");\n'
+                page += '      lastMaskX = newX;\n'
+                page += '      lastMaskY = newY;\n'
+                page += '      mask[newY][newX] = mask[newY][newX] ^ 1;\n'
+                page += '      drawGrid(canvas, mask);\n'
+                page += '    }\n'
+                page += '  }\n'
+                page += '}, false);\n'
+                page += 'canvas.addEventListener("mousedown", function(event) {\n'
+                page += '  mousePosition = getMousePosition(canvas, event);\n'
+                page += '  changeMask = ! changeMask;\n'
+                page += '  console.log("changing changeMask to", changeMask);\n'
+                page += '  if (!changeMask) {\n'
+                page += '    let post = new XMLHttpRequest();\n'
+                page += '    post.open("POST", "/BoxPosition");\n'
+                page += "    post.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');\n"
+                page += "    let info = 'mask=' + mask ;\n"
+                page += '    post.send(info);\n'
+                page += '    post.onreadystatechange = function() {\n'
+                page += '      if (post.readyState == 4) {\n'
+                page += '        if (post.status = 200) {\n'
+                page += '          console.log("Got:", post.responseText);\n'
+                page += '        }\n'
+                page += '      }\n'
+                page += '    };\n'
+                page += '  }\n'
+                page += '}, false);\n'
+                page += 'var firstGrid = true;'
+                page += 'var intervalCount = 0;'
+                page += 'setInterval(function() {\n'
+                page += '  if (firstGrid) {\n'
+                page += '    if (intervalCount > 0) {\n'
+                page += '      console.log("drawing first grid");'
+                page += '      firstGrid = false;\n'
+                page += '      drawGrid(canvas, mask);\n'
+                page += '    } else {\n'
+                page += '      intervalCount++;\n'
+                page += '    }\n'
+                page += '  }\n'
+                page += '}, 500);\n'
+                page += 'console.log("Setup complete")\n'
+                page += "</script>\n"
+                page += '<div style="position:absolute; top:540px; left:20px">\n'
+                page += '<h2>Camera Settings</h2>'
+                page += '<ul>'
+                page += '<li>'
+                page += '<form action="/index.html" method="post">'
+                page += '<label for="camera1">Shutter Speed:</label><input pattern="[0-9]{1,7}" type="text" name="Shutter"'
+                page += ' placeholder="' + "{:7d}".format(self.server.camera.exposure_speed) + '" maxlength="8" size="8"> microseconds</li>'
+                page += '</form>'
+                page += '<li>'
+                page += '<form action="/index.html" method="post">'
+                page += '<label for="camera2">Frame Rate:</label><input pattern="[0-9]{1,2}" type="text" name="FrameRate"'
+                page += ' placeholder="' + "{:2d}".format(int(float(self.server.camera.framerate.numerator)/float(self.server.camera.framerate.denominator))) + '" maxlength="3" size="3"> frames / second</li>'
+                page += '</form>'
+                page += '</ul>'
+                page += '<form action="/index.html" method="post">'
+                page += '<h2>Motion Detection Sensitivity</h2>'
+                page += '<label for="Attenuation">Least(99.99) / Most (0.01)</label><input pattern="[0-9]{1,2}\.[0-9]{1,2}" type="text" name="Attenuation"'
+                page += ' placeholder="' + "{:5.2f}".format(self.server.motionDetector.sensitivity) + '" maxlength="6" size="6">'
+                page += '</form>'
+                page += '<form action="/index.html" method="post" id="mode">'
+                page += '<label for="mode"></label><br>'
+                page += '<input type="hidden" name="mode" value="swap">'
+                page += '<input type="submit" value="Return to Normal">'
+                page += '</form>'
+                page += '</div>\n'
+                page += '</body>\n'
+                page += '</html>\n'
             else:
-                page += '<h2>' + self.server.fileName + '</h2>\n'
-            page += '<img class="base" src="stream.mjpg" width="640" height="480" style="position:absolute; top:60px; left:10px" />\n'
-            page += '<canvas class="overlay" id="imageArea" width="640" height="480" style="position:absolute; top:60px; left:10px"></canvas>\n'
-            page += '<div style="position:absolute; top:540px; left:20px">\n'
-            page += '<h2>Video Sources</h2>\n'
-            page += '<ul>\n'
-            page += '<form action="/index.html" method="post" id="deletes">'
-            for afile in sorted(files):
-                page += '<li><a href=' + afile + '>' + afile + '</a><label for="' + afile + '"></label><input type="checkbox" name="' + afile + '"></li>'
-            page += '<li><a href=camera>camera</a></li>'
-            page += '</form>'
-            page += '</ul>'
-            page += '<button type="submit" form="deletes">Delete Checked Files</button>'
-            page += '<h2>Camera Settings</h2>'
-            page += '<ul>'
-            page += '<li>'
-            page += '<form action="/index.html" method="post">'
-            page += '<label for="camera1">Shutter Speed:</label><input pattern="[0-9]{1,7}" type="text" name="Shutter"'
-            page += ' placeholder="' + "{:7d}".format(self.server.camera.exposure_speed) + '" maxlength="8" size="8"> microseconds</li>'
-            page += '</form>'
-            page += '<li>'
-            page += '<form action="/index.html" method="post">'
-            page += '<label for="camera2">Frame Rate:</label><input pattern="[0-9]{1,2}" type="text" name="FrameRate"'
-            page += ' placeholder="' + "{:2d}".format(int(float(self.server.camera.framerate.numerator)/float(self.server.camera.framerate.denominator))) + '" maxlength="3" size="3"> frames / second</li>'
-            page += '</form>'
-            page += '</ul>'
-            page += '<form action="/index.html" method="post">'
-            page += '<h2>Motion Detection Sensitivity</h2>'
-            page += '<label for="Attenuation">Least(99.99) / Most (0.01)</label><input pattern="[0-9]{1,2}\.[0-9]{1,2}" type="text" name="Attenuation"'
-            page += ' placeholder="' + "{:5.2f}".format(self.server.motionDetector.sensitivity) + '" maxlength="6" size="6">'
-            page += '</form>'
-            page += '</div>\n'
-            page += '</body>\n'
-            page += '</html>\n'
+                files = glob.glob('*.mjpeg')
+                page = ""
+                page += '<!DOCTYPE html>\n'
+                page += '<html lang="en">\n'
+                page += '<head>\n'
+                page += '<meta charset="utf-8">\n'
+                page += '<meta http-equiv="Pragma" content="no-cache">\n'
+                page += '<link rel="stylesheet" href="style.css"/>\n'
+                page += '<title>SurCam</title>\n'
+                page += '</head>\n'
+                page += '<body>\n'
+                if self.server.fileName == 'default':
+                    page += '<h1>Video from surCam ' + self.server.defaultsObject.getCameraName() + '</h1>\n'
+                else:
+                    page += '<h2>' + self.server.fileName + '</h2>\n'
+                page += '<img class="base" src="stream.mjpg" width="640" height="480" style="position:absolute; top:60px; left:10px" />\n'
+                page += '<canvas class="overlay" id="imageArea" width="640" height="480" style="position:absolute; top:60px; left:10px"></canvas>\n'
+                page += '<div style="position:absolute; top:540px; left:20px">\n'
+                page += '<h2>Video Sources</h2>\n'
+                page += '<ul>\n'
+                page += '<form action="/index.html" method="post" id="deletes">'
+                for afile in sorted(files):
+                    page += '<li><a href=' + afile + '>' + afile + '</a><label for="' + afile + '"></label><input type="checkbox" name="' + afile + '"></li>'
+                page += '<li><a href=camera>camera</a></li>'
+                page += '</form>'
+                page += '</ul>'
+                page += '<button type="submit" form="deletes">Delete Checked Files</button>'
+                page += '<form action="/index.html" method="post" id="mode">'
+                page += '<label for="mode"></label><br>'
+                page += '<input type="hidden" name="mode" value="swap">'
+                page += '<input type="submit" value="Settings">'
+                page += '</form>'
+                page += '</div>\n'
+                page += '</body>\n'
+                page += '</html>\n'
             content = page.encode('utf-8')
             self.server.output.start(self.server.fileName)
             self.send_response(200)
@@ -241,8 +391,10 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
             length = int(self.headers['Content-Length'])
             line = self.rfile.read(length)
             line = line.decode('utf-8')
+            print("raw input line:", line)
             filesToDelete = line.split('=on')
             for fileName in filesToDelete:
+                print("'fileName':", fileName)
                 if fileName:
                     conditionedFileName = fileName.strip('&').replace('%3A', ':')
                     if "Attenuation" in fileName:
@@ -270,6 +422,8 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                         self.server.defaultsObject.setFramerate(int(newValue))
                         self.server.restartCamera()
                         time.sleep(3.0)
+                    elif "mode=swap" in fileName:
+                        self.server.settingsMode = not self.server.settingsMode
                     else:
                         print("Request to delete file:", conditionedFileName)
                         try:
@@ -279,7 +433,16 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
             self.send_response(302)
             self.send_header('location', 'index.html')
             self.end_headers()
-
+        else:
+            length = int(self.headers['Content-Length'])
+            line = self.rfile.read(length)
+            line = line.decode('utf-8')
+            print('got a post with:', line)
+            values = line.split("=")[1].split(",")
+            newMask = np.asarray([int(asciiValue) for asciiValue in values]).reshape(30, 41)
+            print('newMask:', newMask, type(newMask), newMask.shape)
+            self.server.defaultsObject.setMask(newMask)
+            self.server.motionDetector.mask = newMask
 
 class MotionDetector(PiMotionAnalysis):
     '''
@@ -505,6 +668,14 @@ class HandleDefaults():
         self.defaults['sensitivity'] = value
         self.write()
 
+    def setMask(self, value):
+        '''
+        setter - mask
+        '''
+        self.defaults['mask'] = value.tolist()
+        self.mask = value
+        self.write()
+
     def write(self):
         '''
         write - update defaults file
@@ -539,6 +710,7 @@ class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
         self.camera.start_recording('/dev/null', format='h264', splitter_port=3,
                                     motion_output=self.motionDetector)
         self.background = Background(self.camera)
+        self.settingsMode = False
 
     def restartCamera(self):
         self.camera.stop_recording(splitter_port=1)
