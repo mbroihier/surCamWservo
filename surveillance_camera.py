@@ -13,7 +13,7 @@ import threading
 from threading import Condition
 import picamera
 from picamera.array import PiMotionAnalysis
-
+import HW
 
 class StreamingOutput():
     '''
@@ -291,6 +291,45 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                     page += '<h2>' + self.server.fileName + '</h2>\n'
                 page += '<img class="base" src="stream.mjpg" width="640" height="480" style="position:absolute; top:60px; left:10px" />\n'
                 page += '<canvas class="overlay" id="imageArea" width="640" height="480" style="position:absolute; top:60px; left:10px"></canvas>\n'
+                page += '<script>'
+                page += 'function getMousePosition(canvas, event) {\n'
+                page += '  let rect = canvas.getBoundingClientRect();\n'
+                page += '  let x = event.clientX - rect.left;\n'
+                page += '  let y = event.clientY - rect.top;\n'
+                page += '  if (x < 0) {\n'
+                page += '    x = 0;\n'
+                page += '  } else if (x > (rect.width - 16)) {\n'
+                page += '    x = rect.width - 16;\n'
+                page += '  }\n'
+                page += '  if (y < 0) {\n'
+                page += '    y = 0;\n'
+                page += '  } else if (y > (rect.height - 16)) {\n'
+                page += '    y = rect.height - 16;\n'
+                page += '  }\n'
+                page += '  return { x: x, y: y };\n'
+                page += '}\n'
+                page += 'var canvas = document.getElementById("imageArea");\n'
+                page += 'console.log("canvas has been definded", canvas);\n'
+                page += 'canvas.addEventListener("mousedown", function(event) {\n'
+                page += '  let mousePosition = getMousePosition(canvas, event);\n'
+                page += '  let post = new XMLHttpRequest();\n'
+                page += '  post.open("POST", "/BoxPosition");\n'
+                page += "  post.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');\n"
+                page += '  let newX = Math.floor(mousePosition.x / 16);\n'
+                page += "  let info = 'cursor=' + newX;\n"
+                page += '  post.send(info);\n'
+                page += '  post.onreadystatechange = function() {\n'
+                page += '    if (post.readyState == 4) {\n'
+                page += '      if (post.status = 200) {\n'
+                page += '        console.log("Got:", post.responseText);\n'
+                page += '      }\n'
+                page += '    }\n'
+                page += '  };\n'
+                page += '}, false);\n'
+                page += 'setInterval(function() {\n'
+                page += '}, 500);\n'
+                page += 'console.log("Setup complete")\n'
+                page += "</script>\n"
                 page += '<div style="position:absolute; top:540px; left:20px">\n'
                 page += '<h2>Video Sources</h2>\n'
                 page += '<ul>\n'
@@ -434,15 +473,38 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
             self.send_header('location', 'index.html')
             self.end_headers()
         else:
-            length = int(self.headers['Content-Length'])
-            line = self.rfile.read(length)
-            line = line.decode('utf-8')
-            print('got a post with:', line)
-            values = line.split("=")[1].split(",")
-            newMask = np.asarray([int(asciiValue) for asciiValue in values]).reshape(30, 41)
-            print('newMask:', newMask, type(newMask), newMask.shape)
-            self.server.defaultsObject.setMask(newMask)
-            self.server.motionDetector.mask = newMask
+            if self.server.settingsMode:
+                length = int(self.headers['Content-Length'])
+                line = self.rfile.read(length)
+                line = line.decode('utf-8')
+                print('got a post with:', line)
+                values = line.split("=")[1].split(",")
+                newMask = np.asarray([int(asciiValue) for asciiValue in values]).reshape(30, 41)
+                print('newMask:', newMask, type(newMask), newMask.shape)
+                self.server.defaultsObject.setMask(newMask)
+                self.server.motionDetector.mask = newMask
+            else:
+                length = int(self.headers['Content-Length'])
+                line = self.rfile.read(length)
+                line = line.decode('utf-8')
+                print('got a post with:', line)
+                if time.time() - self.server.lastServoCommandTime > 1.0:
+                    from_ = self.server.servo.position
+                    to = int(line.split("=")[1])
+                    if to >= 20:
+                        #to = (to - 20) * 25 + from_
+                        to = from_ - (to - 20) * 25
+                    else:
+                        #to = from_ - (19 - to) * 25
+                        to = from_ + (19 - to) * 25
+                    if not self.server.servo.isBusy():
+                        to = self.server.servo.setPositionFromTo(from_, to)
+                        print("servo position changing from {} to {}".format(from_, to))
+                        self.server.lastServoCommandTime = time.time()
+                    else:
+                        print("servo was busy - move command ignored")
+                else:
+                    print("debouncing mouse button press")
 
 class MotionDetector(PiMotionAnalysis):
     '''
@@ -711,6 +773,8 @@ class StreamingCameraServer(socketserver.ThreadingMixIn, httpServer.HTTPServer):
                                     motion_output=self.motionDetector)
         self.background = Background(self.camera)
         self.settingsMode = False
+        self.servo = HW.HW(20000, 1500)
+        self.lastServoCommandTime = time.time()
 
     def restartCamera(self):
         self.camera.stop_recording(splitter_port=1)
