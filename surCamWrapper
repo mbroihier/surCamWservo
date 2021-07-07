@@ -1,3 +1,4 @@
 #!/bin/bash
+cd /home/pi/surCam/servod/build/; sudo ./servod &
 cd /home/pi/surCam/; python3 ./surveillance_camera.py >/dev/null 2>&1
 
