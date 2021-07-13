@@ -58,17 +58,22 @@ class HW():
             if toSetting > self.softStop1:
                 toSetting = self.softStop1
                 toTimeUSec = toSetting
-        tick = 0
-        #delta = -1
-        delta = toSetting - setting
-        #total = setting - toSetting + 1
-        total = 2
-        #if toSetting > setting:
-            #delta = 1
-            #total = toSetting - setting + 1  # always go to initial position first (repeats last)
-        print("Going from {} to {} over {} intervals".format(fromTimeUSec, toTimeUSec, total))
-        while tick < total:
-            print("commanding {}".format(setting))
+        print("Going from {} to {}".format(fromTimeUSec, toTimeUSec))
+        newValue = int(toSetting * 0.10)
+        direction = 1 if toSetting >= setting else -1
+        oldBeta = 0
+        slew = 0
+        while setting != toSetting:
+            newBeta = int(0.90 * setting)
+            if newBeta == oldBeta:
+                slew += direction
+            setting = newBeta + newValue + slew
+            oldBeta = newBeta
+            if setting < 1100:
+                break
+            if setting > 1900:
+                break
+            print("commanding {}, Beta {}, newValue was {}".format(setting, oldBeta, newValue))
             self.servoFifo.write("0, {}\n".format(setting))
             self.servoFifo.write("1, {}\n".format(setting))
             self.servoFifo.write("2, {}\n".format(setting))
@@ -79,12 +84,8 @@ class HW():
             self.servoFifo.write("7, {}\n".format(setting))
             self.servoFifo.write("8, {}\n".format(setting))
             self.servoFifo.write("9, {}\n".format(setting))
-            setting += delta
-            tick += 1
         self.position = toTimeUSec
         self.servoFifo.close()
-        #print(self.fdServoFifo)
-        #os.fsync(self.servoFifo.fileno())
         self.servoFifo = open("/dev/servo_fifo", "w")
         print("storing new position: {}".format(toTimeUSec))
         self.servoBusy = False
