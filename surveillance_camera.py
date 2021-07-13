@@ -490,31 +490,15 @@ class StreamingHandler(httpServer.BaseHTTPRequestHandler):
                 print('got a post with:', line)
                 if time.time() - self.server.lastServoCommandTime > 1.0:
                     from_ = self.server.servo.position
-                    #self.server.postCount += 1
-                    #line = " =39"
-                    #if self.server.postCount % 2:
-                    #    line = " =0"
                     to = int(line.split("=")[1])
-                    #delta = int(abs(19.5 - to) * 14.2 + 0.5)
-                    #delta = int(abs(19.5 - to) * 10.33 + 0.5)
                     delta = int(abs(19.5 - to) * 8.11643 + 0.5)
                     if to >= 20:
                         delta = - delta
                     if to == 20 or to == 19:
                         delta = 0
-                    #if to >= 20:
-                        #to = (to - 20) * 25 + from_
-                        #to = from_ - (to - 20) * 25
-                        #to = from_ - (to - 20) * 14  # 14.2
-                        #to = from_ - int((to - 19.5) * 14.2 + 0.5)  # 14.2
-                    #else:
-                        #to = from_ - (19 - to) * 25
-                        #to = from_ + (19 - to) * 25
-                        #to = from_ + int((19.5 - to) * 14.2 + 0.5)  # 14.2
                     to = from_ + delta
                     if not self.server.servo.isBusy():
                         to = self.server.servo.setPositionFromTo(from_, to)
-                        #print("servo position changing from {} to {} delta {}".format(from_, to, delta))
                         self.server.lastServoCommandTime = time.time()
                     else:
                         print("servo was busy - move command ignored")
