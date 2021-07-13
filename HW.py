@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os
+import time
 
 class HW():
     '''
@@ -69,10 +70,6 @@ class HW():
                 slew += direction
             setting = newBeta + newValue + slew
             oldBeta = newBeta
-            if setting < 1100:
-                break
-            if setting > 1900:
-                break
             print("commanding {}, Beta {}, newValue was {}".format(setting, oldBeta, newValue))
             self.servoFifo.write("0, {}\n".format(setting))
             self.servoFifo.write("1, {}\n".format(setting))
@@ -84,6 +81,8 @@ class HW():
             self.servoFifo.write("7, {}\n".format(setting))
             self.servoFifo.write("8, {}\n".format(setting))
             self.servoFifo.write("9, {}\n".format(setting))
+            self.servoFifo.flush()
+            time.sleep(0.0625)
         self.position = toTimeUSec
         self.servoFifo.close()
         self.servoFifo = open("/dev/servo_fifo", "w")
